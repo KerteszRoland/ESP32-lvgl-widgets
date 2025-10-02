@@ -58,7 +58,7 @@ lv_obj_t *in_progress_entry_spinner;
 lv_obj_t *entries_list_spinner;
 widget_data clockify_widget_data = {};
 widget_data clockify_widget_data_prev = {};
-bool init_render = true;
+bool init_render_clockify = true;
 static TaskHandle_t create_entry_from_another_task = NULL;
 static bool create_entry_from_another_in_progress = false;
 static TaskHandle_t stop_in_progress_entry_task = NULL;
@@ -754,7 +754,7 @@ bool is_clockify_widget_data_changed()
 
 extern "C" void render_clockify_widget(lv_obj_t *parent)
 {
-    if (init_render)
+    if (init_render_clockify)
     {
         Serial.println("Initializing clockify widget");
         if (parent == nullptr)
@@ -768,7 +768,7 @@ extern "C" void render_clockify_widget(lv_obj_t *parent)
             xTaskCreate(refresh_time_entries_task_func, "RefreshTimeEntries", 8192, NULL, 1, &refresh_time_entries_task);
         }
        
-        init_render = false;
+        init_render_clockify = false;
     }
 
     if (is_clockify_widget_data_changed() == false)
