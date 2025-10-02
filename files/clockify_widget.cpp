@@ -8,6 +8,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include "config.h"
+#include "utils.h"
 #include "fonts.h"
 
 struct time_interval
@@ -74,72 +75,6 @@ const int REFRESH_CLOCKIFY_WIDGET_POLLING_FREQ_MS = 5000; // Refresh frequency i
 
 const bool DEBUG_API_REQUESTS = true;
 
-lv_obj_t* create_lv_div(lv_obj_t* parent)
-{
-    lv_obj_t* div = lv_obj_create(parent);
-    lv_obj_set_style_pad_all(div, 0, LV_PART_MAIN);
-    lv_obj_set_style_margin_all(div, 0, LV_PART_MAIN);
-    lv_obj_set_style_border_width(div, 0, LV_PART_MAIN);
-    lv_obj_set_style_min_height(div, 0, LV_PART_MAIN);
-    lv_obj_set_style_min_width(div, 0, LV_PART_MAIN);
-    lv_obj_set_height(div, LV_SIZE_CONTENT);
-    lv_obj_set_scrollbar_mode(div, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_clear_flag(div, LV_OBJ_FLAG_SCROLLABLE);
-    return div;
-}
-
-time_t get_current_utc_time(void)
-{
-    time_t timeinfo;
-    time(&timeinfo);
-    return timeinfo;
-}
-
-std::string time_span_from_str(std::string *start, std::string *end)
-{
-    struct tm start_timeinfo = {0};
-    if (strptime(start->c_str(), "%Y-%m-%dT%H:%M:%SZ", &start_timeinfo) == nullptr)
-    {
-        Serial.println("Failed to parse start time");
-        return "00:00:00";
-    }
-
-    struct tm end_timeinfo = {0};
-    if (strptime(end->c_str(), "%Y-%m-%dT%H:%M:%SZ", &end_timeinfo) == nullptr)
-    {
-        Serial.println("Failed to parse start time");
-        return "00:00:00";
-    }
-
-
-    // Convert both times to time_t for proper calculation
-    time_t start_time = mktime(&start_timeinfo);
-    time_t end_time = mktime(&end_timeinfo);
-
-    // Calculate difference in seconds
-    double diff_seconds_total = difftime(end_time, start_time);
-
-    if (diff_seconds_total < 0)
-    {
-        Serial.printf("End time: %s\n", ctime(&end_time));
-        Serial.printf("Start time: %s\n", ctime(&start_time));
-        Serial.printf("Diff seconds total: %f\n", diff_seconds_total);
-        Serial.println("Negative time!");
-        return "00:00:00"; // Handle negative time (shouldn't happen in normal use)
-    }
-
-    int total_seconds = (int)diff_seconds_total;
-    int hours = total_seconds / 3600;
-    int minutes = (total_seconds % 3600) / 60;
-    int seconds = total_seconds % 60;
-
-    // Format with zero padding
-    char timer_buffer[16];
-    snprintf(timer_buffer, sizeof(timer_buffer), "%02d:%02d:%02d", hours, minutes, seconds);
-
-    return std::string(timer_buffer);
-}
-
 std::string start_time_str_to_timer(std::string *start)
 {
     time_t end = get_current_utc_time();
@@ -158,69 +93,15 @@ std::string start_time_str_to_timer(std::string *start)
     return time_span_from_str(start, &current_time_str);
 }
 
-std::pair<bool, JsonDocument> send_http_request(const std::string serverEndpoint, const std::string http_method, const std::string payload)
+std::pair<bool, JsonDocument> send_http_request_clockify(const std::string serverEndpoint, const std::string http_method, const std::string payload="", const std::vector<std::pair<std::string, std::string>> headers={})
 {
-    // Check WiFi connection status
-    if (WiFi.status() != WL_CONNECTED)
-    {
-        Serial.println("WiFi not connected!");
-        return {false, JsonDocument()};
-    }
-
-    HTTPClient http;
-    http.begin(serverEndpoint.c_str());
-    http.addHeader("x-api-key", CLOCKIFY_API_KEY);
-    http.addHeader("Content-Type", "application/json");
-
-    int httpResponseCode = http.sendRequest(http_method.c_str(), payload.c_str());
-    if (DEBUG_API_REQUESTS)
-    {
-        Serial.printf("%s, %s\n", http_method.c_str(), serverEndpoint.c_str());
-    }
-    if (httpResponseCode > 0)
-    {
-        if (DEBUG_API_REQUESTS)
-        {
-            Serial.printf("HTTP Response code: %d\n", httpResponseCode);
-        }
-        String payload = http.getString();
-
-        if (DEBUG_API_REQUESTS)
-        {
-            //Serial.printf("Payload: %s\n", payload.c_str());
-        }
-        JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, payload);
-
-        if (error)
-        {
-            Serial.printf("JSON parsing failed: %s\n", error.c_str());
-            http.end();
-            return {false, JsonDocument()};
-        }
-
-        if (doc.isNull())
-        {
-            Serial.println("doc is null!");
-            http.end();
-            return {false, JsonDocument()};
-        }
-
-        http.end();
-        return {true, doc};
-    }
-    else
-    {
-        Serial.printf("HTTP Error code: %d\n", httpResponseCode);
-        http.end();
-        return {false, JsonDocument()};
-    }
+    return send_http_request(serverEndpoint, http_method, payload, {{"x-api-key", CLOCKIFY_API_KEY}}, DEBUG_API_REQUESTS);
 }
 
 std::pair<bool, user_data> request_clockify_user_info(void)
 {
     const std::string serverEndpoint = "https://api.clockify.me/api/v1/user";
-    auto [doc_valid, doc] = send_http_request(serverEndpoint, "GET", "");
+    auto [doc_valid, doc] = send_http_request_clockify(serverEndpoint, "GET");
 
     if (!doc_valid)
     {
@@ -245,7 +126,7 @@ std::pair<bool, std::vector<time_entry>> request_clockify_time_entries()
 
     user_data *user = &clockify_widget_data.user;
     const std::string serverEndpoint = (String("https://api.clockify.me/api/v1/workspaces/") + user->workspace_id.c_str() + String("/user/") + user->user_id.c_str() + String("/time-entries?in-progress=false&page-size=5")).c_str();
-    auto [doc_valid, doc] = send_http_request(serverEndpoint, "GET", "");
+    auto [doc_valid, doc] = send_http_request_clockify(serverEndpoint, "GET");
     if (!doc_valid)
     {
         return {false, {}};
@@ -279,7 +160,7 @@ std::pair<bool, time_entry> request_clockify_in_progress_entry()
 
     user_data *user = &clockify_widget_data.user;
     const std::string serverEndpoint = (String("https://api.clockify.me/api/v1/workspaces/") + user->workspace_id.c_str() + String("/user/") + user->user_id.c_str() + String("/time-entries?in-progress=true&page-size=1")).c_str();
-    auto [doc_valid, doc] = send_http_request(serverEndpoint, "GET", "");
+    auto [doc_valid, doc] = send_http_request_clockify(serverEndpoint, "GET");
     if (!doc_valid)
     {
         return {false, {}};
@@ -332,7 +213,7 @@ bool request_clockify_stop_in_progress_entry()
     String patch_payload = "{\"end\": \"" + String(end_time_str) + "\"}";
 
     const std::string serverEndpoint = (String("https://api.clockify.me/api/v1/workspaces/") + user->workspace_id.c_str() + String("/user/") + user->user_id.c_str() + String("/time-entries")).c_str();
-    auto [doc_valid, doc] = send_http_request(serverEndpoint, "PATCH", patch_payload.c_str());
+    auto [doc_valid, doc] = send_http_request_clockify(serverEndpoint, "PATCH", patch_payload.c_str());
     if (!doc_valid)
     {
         return false;
@@ -369,7 +250,7 @@ bool request_clockify_create_entry_from_another(time_entry *from_entry)
     patch_payload += "}";
 
     const std::string serverEndpoint = (String("https://api.clockify.me/api/v1/workspaces/") + user->workspace_id.c_str() + String("/user/") + user->user_id.c_str() + String("/time-entries")).c_str();
-    auto [doc_valid, doc] = send_http_request(serverEndpoint, "POST", patch_payload.c_str());
+    auto [doc_valid, doc] = send_http_request_clockify(serverEndpoint, "POST", patch_payload.c_str());
     if (!doc_valid)
     {
         return false;
