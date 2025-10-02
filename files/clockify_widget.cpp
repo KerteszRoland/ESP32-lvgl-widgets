@@ -8,9 +8,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include "config.h"
-
-LV_FONT_DECLARE(arial_26);
-LV_FONT_DECLARE(arial_20);
+#include "fonts.h"
 
 struct time_interval
 {
