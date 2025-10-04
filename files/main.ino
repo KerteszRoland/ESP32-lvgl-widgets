@@ -51,14 +51,11 @@ void setup()
     Serial.println(WiFi.localIP());
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
     struct tm timeinfo;
-    if (!getLocalTime(&timeinfo, 5000))
+    while (!getLocalTime(&timeinfo, 5000))
     {
         Serial.println("Failed to obtain time");
     }
-    else
-    {
         Serial.println(&timeinfo, "Current UTC time: %A, %B %d %Y %H:%M:%S");
-    }
     beginLvglHelper(amoled);
 
     tileview = lv_tileview_create(lv_screen_active());
