@@ -2,6 +2,7 @@
 #include <LV_Helper.h>
 #include "stock_widget.h"
 #include "clockify_widget.h"
+#include "linkedin_widget.h"
 #include <WiFi.h>
 #include "time.h"
 #include "config.h"
@@ -14,9 +15,10 @@ const char *ntpServer = "pool.ntp.org";
 const long gmtOffset_sec = 0;
 const int daylightOffset_sec = 0;
 
-lv_obj_t * tileview = nullptr;
-lv_obj_t * tile_home = nullptr;
-lv_obj_t * tile_clockify = nullptr;
+lv_obj_t *tileview = nullptr;
+lv_obj_t *tile_stock = nullptr;
+lv_obj_t *tile_clockify = nullptr;
+lv_obj_t *tile_linkedin = nullptr;
 
 void setup()
 {
@@ -55,27 +57,35 @@ void setup()
     {
         Serial.println("Failed to obtain time");
     }
-        Serial.println(&timeinfo, "Current UTC time: %A, %B %d %Y %H:%M:%S");
+    Serial.println(&timeinfo, "Current UTC time: %A, %B %d %Y %H:%M:%S");
     beginLvglHelper(amoled);
 
     tileview = lv_tileview_create(lv_screen_active());
     lv_obj_set_style_bg_color(tileview, lv_color_hex(0x000000), LV_PART_MAIN);
     lv_obj_set_scrollbar_mode(tileview, LV_SCROLLBAR_MODE_OFF);
 
-    tile_home = lv_tileview_add_tile(tileview, 0, 0, LV_DIR_RIGHT);
-    lv_obj_set_style_pad_all(tile_home, 10, LV_PART_MAIN);
-    render_stock_widget(tile_home);
+    tile_linkedin = lv_tileview_add_tile(tileview, 0, 0, LV_DIR_RIGHT);
+    lv_obj_set_style_pad_all(tile_linkedin, 10, LV_PART_MAIN);
+    lv_obj_set_scrollbar_mode(tile_linkedin, LV_SCROLLBAR_MODE_OFF);
+    render_linkedin_widget(tile_linkedin);
 
-    tile_clockify = lv_tileview_add_tile(tileview, 1, 0, LV_DIR_LEFT);
+    tile_stock = lv_tileview_add_tile(tileview, 1, 0, (lv_dir_t)(LV_DIR_RIGHT | LV_DIR_LEFT));
+    lv_obj_set_style_pad_all(tile_stock, 10, LV_PART_MAIN);
+    render_stock_widget(tile_stock);
+
+    tile_clockify = lv_tileview_add_tile(tileview, 2, 0, LV_DIR_LEFT);
     lv_obj_set_style_pad_all(tile_clockify, 10, LV_PART_MAIN);
 }
 
 void loop()
 {
-    if (tileview != nullptr && lv_tileview_get_tile_active(tileview) == tile_clockify) {
+    if (tileview != nullptr && lv_tileview_get_tile_active(tileview) == tile_clockify)
+    {
         render_clockify_widget(tile_clockify);
         start_clockify_widget_tasks();
-    } else {
+    }
+    else
+    {
         stop_clockify_widget_tasks();
     }
 
